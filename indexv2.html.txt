@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Household Policy Library</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutral (Slate, Stone, Amber) with soft accents -->
+    <!-- Application Structure Plan: A responsive two-panel layout. A fixed sidebar on the left for main category navigation. A dynamic content area on the right to display the selected category's details. An "Overview" dashboard with a Chart.js chart serves as the landing page, providing a high-level summary. This structure was chosen because it's a common and highly intuitive pattern for navigating hierarchical information, allowing users to focus on one section at a time while always maintaining context. The flow is: User sees overview -> clicks category in nav -> content area updates to show sub-categories and policies for that category. Collapsible sub-categories within content areas further enhance content organization. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Overall policy structure and counts per category -> Goal: High-level summary & comparison -> Viz/Method: Chart.js Donut Chart on an "Overview" page -> Interaction: Hover tooltips show counts, clicking a chart segment navigates to the category. Justification: Provides an immediate, digestible visual summary of the library's contents.
+        - Report Info: Hierarchical folder/file structure -> Goal: Organize & Inform -> Viz/Method: Card-based layout using HTML/Tailwind. Each main category gets a content section. Sub-categories are represented as collapsible 'details' elements containing lists of policy files. -> Interaction: Main navigation clicks switch between visible content sections. Collapsible elements allow users to expand/collapse sub-categories for focused viewing. Justification: Translates the abstract file structure into a tangible, browsable web interface that's clean, organized, and easy to understand, with improved content management.
+        - Report Info: File types (.pdf, .xlsx, etc.) -> Goal: Inform -> Viz/Method: Unicode characters (📄, 📊, 📝) used as icons next to file names. -> Interaction: N/A (visual cue only). Justification: A lightweight, no-dependency way to add visual distinction without using image or SVG files.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 450px;
+            height: auto;
+            min-height: 300px;
+            max-height: 450px;
+            margin: auto;
+        }
+        .nav-link {
+            transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
+        }
+        .nav-link.active {
+            background-color: #f59e0b; /* amber-500 */
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* subtle shadow */
+        }
+        .nav-link:not(.active):hover {
+            background-color: #f3f4f6; /* gray-100 */
+            color: #1f2937; /* slate-800 */
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+        .policy-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .policy-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9; /* slate-100 */
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #94a3b8; /* slate-400 */
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; /* slate-500 */
+        }
+        details > summary {
+            list-style: none;
+            cursor: pointer;
+            padding: 0.75rem 0;
+            font-weight: 500;
+            color: #334155; /* slate-700 */
+            border-bottom: 1px solid #e2e8f0; /* slate-200 */
+            position: relative;
+        }
+        details > summary::-webkit-details-marker {
+            display: none;
+        }
+        details[open] > summary {
+            color: #0f172a; /* slate-900 */
+            border-bottom-color: transparent;
+        }
+        details > summary:before {
+            content: '▶';
+            position: absolute;
+            right: 0.5rem;
+            transform: rotate(0);
+            transition: transform 0.2s ease;
+        }
+        details[open] > summary:before {
+            content: '▼';
+            transform: rotate(90deg);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+    <div class="flex flex-col md:flex-row min-h-screen">
+        <!-- Sidebar Navigation -->
+        <aside id="sidebar" class="w-full md:w-64 bg-white border-r border-slate-200 flex-shrink-0 shadow-md">
+            <div class="p-4 border-b border-slate-200">
+                <h1 class="text-2xl font-bold text-slate-700">Policy Library</h1>
+                <p class="text-sm text-slate-500">Household Edition</p>
+            </div>
+            <nav class="p-2">
+                <a href="#overview" class="nav-link flex items-center p-3 rounded-lg mb-2 active">
+                    <span class="mr-3 text-lg">📊</span> Overview
+                </a>
+                <a href="#general" class="nav-link flex items-center p-3 rounded-lg mb-2">
+                    <span class="mr-3 text-lg">🏠</span> General
+                </a>
+                <a href="#financial" class="nav-link flex items-center p-3 rounded-lg mb-2">
+                    <span class="mr-3 text-lg">💰</span> Financial
+                </a>
+                <a href="#maintenance" class="nav-link flex items-center p-3 rounded-lg mb-2">
+                    <span class="mr-3 text-lg">🔧</span> Maintenance
+                </a>
+                <a href="#safety" class="nav-link flex items-center p-3 rounded-lg mb-2">
+                    <span class="mr-3 text-lg">⛑️</span> Safety
+                </a>
+                <a href="#family" class="nav-link flex items-center p-3 rounded-lg mb-2">
+                    <span class="mr-3 text-lg">👨‍👩‍👧‍👦</span> Family & Personal
+                </a>
+                <a href="#digital" class="nav-link flex items-center p-3 rounded-lg mb-2">
+                    <span class="mr-3 text-lg">💻</span> Digital & Tech
+                </a>
+                <a href="#hr" class="nav-link flex items-center p-3 rounded-lg">
+                    <span class="mr-3 text-lg">👥</span> Staff & HR
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 p-4 sm:p-6 md:p-8 bg-slate-100 overflow-y-auto">
+            <div id="content-container">
+                <!-- Overview Section -->
+                <section id="overview" class="content-section">
+                    <h2 class="text-4xl font-bold text-slate-800 mb-4">Library Overview</h2>
+                    <p class="text-slate-700 mb-10 max-w-3xl text-lg leading-relaxed">
+                        Welcome to the interactive household policy library. This dashboard provides a comprehensive overview of all documented guidelines and procedures for our home. Use the navigation on the left to explore specific categories. The chart below illustrates the distribution of policies across the main areas of our household, giving you a quick visual summary of where our guidelines are most concentrated.
+                    </p>
+                    <div class="bg-white p-6 rounded-lg shadow-lg flex justify-center items-center">
+                        <div class="chart-container">
+                            <canvas id="policyChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- General Section -->
+                <section id="general" class="content-section hidden">
+                    <h2 class="text-4xl font-bold text-slate-800 mb-4">General Household Policies</h2>
+                    <p class="text-slate-700 mb-10 max-w-3xl text-lg leading-relaxed">
+                        This section contains foundational policies that apply to the daily operations and shared living within the household. These guidelines ensure harmonious coexistence, proper management of common areas, and clear protocols for visitors.
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <!-- Card: Chore Schedules -->
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Chore Schedules</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Weekly_Chore_Rotation_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <!-- Card: Visitor Guidelines -->
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Visitor Guidelines</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📝</span> Guest_House_Rules_v1.0.md</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <!-- Card: Waste and Recycling -->
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Waste and Recycling</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Recycling_Guidelines_v1.1.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <!-- Card: Shared Spaces -->
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Shared Spaces</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Common_Area_Cleanliness_Policy_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <!-- Card: Household Rules -->
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Household Rules</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📝</span> Door_Closed_Policy_v1.0.md</li>
+                                </ul>
+                            </details>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Financial Section -->
+                <section id="financial" class="content-section hidden">
+                    <h2 class="text-4xl font-bold text-slate-800 mb-4">Financial Policies</h2>
+                     <p class="text-slate-700 mb-10 max-w-3xl text-lg leading-relaxed">
+                       This category centralizes all policies related to household financial management. From budget allocations and spending rules to bill payment schedules and major purchase protocols, these guidelines ensure transparency and fiscal responsibility.
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Budgeting</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📊</span> Monthly_Budget_Allocation_v1.0.xlsx</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Allowance and Spending</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Kids_Allowance_Policy_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Bill Payment</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📝</span> Utility_Bill_Payment_Schedule_v1.0.md</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Large Purchases</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Major_Purchase_Approval_Process_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Maintenance Section -->
+                <section id="maintenance" class="content-section hidden">
+                     <h2 class="text-4xl font-bold text-slate-800 mb-4">Maintenance and Property</h2>
+                     <p class="text-slate-700 mb-10 max-w-3xl text-lg leading-relaxed">
+                        This area covers the upkeep and care of the property and its assets. It includes maintenance schedules for appliances and vehicles, gardening guidelines, and procedures for handling home repairs, ensuring the property remains in excellent condition.
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Appliance Care</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Appliance_Maintenance_Schedule_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Garden and Yard</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📝</span> Lawn_Care_Guidelines_v1.0.md</li>
+                                </ul>
+                            </details>
+                        </div>
+                         <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Home Repairs</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Minor_Repair_Procedures_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                         <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Vehicle Maintenance</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📊</span> Car_Maintenance_Log_v1.0.xlsx</li>
+                                </ul>
+                            </details>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Safety Section -->
+                <section id="safety" class="content-section hidden">
+                    <h2 class="text-4xl font-bold text-slate-800 mb-4">Safety and Emergency</h2>
+                    <p class="text-slate-700 mb-10 max-w-3xl text-lg leading-relaxed">
+                       Safety is paramount in our household. This section outlines all safety-related procedures, including emergency contact lists, fire escape plans, first aid information, and pet safety protocols, ensuring everyone is prepared and secure in any situation.
+                    </p>
+                   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Emergency Contacts</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Emergency_Contact_List_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Fire Safety</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Fire_Escape_Plan_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                         <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">First Aid</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📝</span> First_Aid_Kit_Inventory_v1.0.md</li>
+                                </ul>
+                            </details>
+                        </div>
+                         <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Pet Safety</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Pet_Emergency_Plan_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Family Section -->
+                <section id="family" class="content-section hidden">
+                    <h2 class="text-4xl font-bold text-slate-800 mb-4">Family and Personal</h2>
+                    <p class="text-slate-700 mb-10 max-w-3xl text-lg leading-relaxed">
+                        These policies govern family conduct, personal responsibilities, and effective interpersonal communication within our home. They include guidelines for family meetings, screen time usage, guest protocols, and strategies for navigating and resolving disagreements, fostering a positive and respectful family dynamic.
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Communication</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Family_Meeting_Guidelines_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Screen Time</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📝</span> Electronic_Device_Usage_Policy_v1.0.md</li>
+                                </ul>
+                            </details>
+                        </div>
+                         <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Guest Rules</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Overnight_Guest_Guidelines_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                         <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Personal Responsibilities</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Individual_Responsibility_Chart_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Conflict Resolution</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📝</span> Managing_Uncomfortable_Situations_v1.0.md</li>
+                                </ul>
+                            </details>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Digital Section -->
+                <section id="digital" class="content-section hidden">
+                    <h2 class="text-4xl font-bold text-slate-800 mb-4">Digital and Technology</h2>
+                     <p class="text-slate-700 mb-10 max-w-3xl text-lg leading-relaxed">
+                        This section contains all policies for the responsible use of digital devices and services within our home. It covers essential guidelines for internet safety, secure password management, online privacy, and rules for shared devices to promote secure technology use for all family members.
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Internet Usage</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Internet_Safety_Rules_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Device Charging</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📝</span> Shared_Device_Charging_Policy_v1.0.md</li>
+                                </ul>
+                            </details>
+                        </div>
+                         <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Password Management</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Password_Best_Practices_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                         <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Online Privacy</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Family_Online_Privacy_Guidelines_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- HR Section -->
+                <section id="hr" class="content-section hidden">
+                    <h2 class="text-4xl font-bold text-slate-800 mb-4">Household Staff and HR</h2>
+                    <p class="text-slate-700 mb-10 max-w-3xl text-lg leading-relaxed">
+                        This comprehensive section covers all aspects of household employment. It includes policies for recruitment, onboarding, roles and responsibilities, compensation, performance management, confidentiality, leave, and termination, ensuring a professional and well-managed relationship with all staff.
+                    </p>
+                   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Recruitment & Hiring</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Staff_Recruitment_Process_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Onboarding & Training</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Staff_Onboarding_Checklist_v1.0.pdf</li>
+                                    <li class="flex items-center"><span class="mr-2">📝</span> New_Hire_Training_Guidelines_v1.0.md</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Roles & Responsibilities</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📝</span> Housekeeper_Duties_v1.0.md</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Compensation & Benefits</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Staff_Payment_Schedule_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Performance Management</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Staff_Performance_Review_Policy_v1.0.pdf</li>
+                                    <li class="flex items-center"><span class="mr-2">📝</span> Disciplinary_Action_Policy_v1.0.md</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Code of Conduct</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Staff_Code_of_Conduct_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Confidentiality & Privacy</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Staff_Confidentiality_Agreement_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                         <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Leave & Absence</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Staff_Time_Off_Policy_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                         <div class="bg-white p-6 rounded-lg shadow-md policy-card">
+                            <details open>
+                                <summary class="text-xl">Termination & Exit</summary>
+                                <ul class="mt-4 space-y-2 text-slate-700">
+                                    <li class="flex items-center"><span class="mr-2">📄</span> Staff_Termination_Procedures_v1.0.pdf</li>
+                                </ul>
+                            </details>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const policyData = {
+                general: 5,
+                financial: 4,
+                maintenance: 4,
+                safety: 4,
+                family: 5,
+                digital: 4,
+                hr: 11
+            };
+
+            const labels = ['General', 'Financial', 'Maintenance', 'Safety', 'Family & Personal', 'Digital & Tech', 'Staff & HR'];
+            const data = Object.values(policyData);
+            const chartColors = [
+                '#fcd34d', // amber-300
+                '#a78bfa', // violet-400
+                '#6ee7b7', // emerald-300
+                '#fca5a5', // red-300
+                '#93c5fd', // blue-300
+                '#c4b5fd', // purple-300
+                '#e5e7eb'  // gray-200
+            ];
+            
+            // Chart.js doughnut chart
+            const ctx = document.getElementById('policyChart').getContext('2d');
+            const policyChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Number of Policies',
+                        data: data,
+                        backgroundColor: chartColors,
+                        borderColor: '#ffffff',
+                        borderWidth: 2,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                font: {
+                                    size: 14
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: '#1f2937', // gray-800
+                            titleFont: { size: 16 },
+                            bodyFont: { size: 14 },
+                            padding: 12,
+                            cornerRadius: 4,
+                            displayColors: false,
+                        }
+                    },
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const chartElement = elements[0];
+                            const index = chartElement.index;
+                            const sectionId = Object.keys(policyData)[index];
+                            
+                            // Find the corresponding nav link and click it
+                            const navLink = document.querySelector(`.nav-link[href="#${sectionId}"]`);
+                            if (navLink) {
+                                navLink.click();
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Navigation logic
+            const navLinks = document.querySelectorAll('.nav-link');
+            const contentSections = document.querySelectorAll('.content-section');
+
+            function switchView(hash) {
+                if (!hash || !document.querySelector(hash)) {
+                    hash = '#overview';
+                }
+
+                navLinks.forEach(link => {
+                    if (link.getAttribute('href') === hash) {
+                        link.classList.add('active');
+                    } else {
+                        link.classList.remove('active');
+                    }
+                });
+
+                contentSections.forEach(section => {
+                    if ('#' + section.id === hash) {
+                        section.classList.remove('hidden');
+                    } else {
+                        section.classList.add('hidden');
+                    }
+                });
+            }
+
+            navLinks.forEach(link => {
+                link.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const targetId = this.getAttribute('href');
+                    history.pushState(null, null, targetId);
+                    switchView(targetId);
+                });
+            });
+            
+            window.addEventListener('popstate', () => switchView(window.location.hash));
+            switchView(window.location.hash);
+        });
+    </script>
+</body>
+</html>
